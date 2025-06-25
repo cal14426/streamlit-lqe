@@ -52,6 +52,7 @@ def load_data(file):
             # If a column is missing, stop and show an error message
             st.error(f"Error: Missing required column '{col}' in the uploaded file.")
             st.stop() # Halts the app execution
+    df = df[['Phase Timestamp: Translate', 'Target Locale', 'Edit Distance: from Translate to Dist. Review', 'Edit Distance: from Dist. Review to LSP Review']]
 
     # Clean and convert the timestamp column to datetime objects
     df[date_col] = df[date_col].astype(str).replace('No Data', np.nan)
