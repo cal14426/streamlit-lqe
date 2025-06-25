@@ -13,10 +13,10 @@ st.set_page_config(
 )
 
 # --- App Title and Description ---
-st.title("📊 Interactive Translation Edit Dashboard")
+st.title("📊 Translation Edit Dashboard")
 st.write(
-    "This app analyzes translation edits from an uploaded report. "
-    "Upload your CSV or Excel file to begin."
+    "This app analyzes translation edits between the distributor review and the post-production review. "
+    "Upload csv file to begin."
 )
 
 # --- File Uploader and Data Caching ---
