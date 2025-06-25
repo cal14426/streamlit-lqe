@@ -9,7 +9,8 @@ import os
 st.set_page_config(
     page_title="Translation Edit Dashboard",
     page_icon="�",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"  # This ensures the sidebar is expanded by default
 )
 
 # --- App Title and Description ---
