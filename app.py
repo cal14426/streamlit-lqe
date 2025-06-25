@@ -35,7 +35,7 @@ def load_data(file):
     # Check if the file is CSV or Excel and load accordingly
     try:
         if file.name.endswith('.csv'):
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, low_memory=False)
         else:
             df = pd.read_excel(file)
     except Exception as e:
