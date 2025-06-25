@@ -8,22 +8,22 @@ import os
 # Set the title and icon that appear in the browser tab and app window
 st.set_page_config(
     page_title="Translation Edit Dashboard",
-    page_icon="📊",
+    page_icon="�",
     layout="wide"
 )
 
 # --- App Title and Description ---
-st.title("📊 Interactive Translation Edit Dashboard")
+st.title("📊 Translation Edit Dashboard")
 st.write(
-    "This app analyzes translation edits directly from your large, multi-sheet Excel report. "
-    "Upload your Excel file to begin."
+    "This app analyzes translation edits between the distributor review and the post-production review. "
+    "Upload csv file to begin. Please convert to csv before processing for speed."
 )
 
-# --- File Uploader ---
-# Now primarily looks for Excel files but still allows CSVs
+# --- File Uploader and Data Caching ---
+# Use a file uploader to allow users to provide their own data
 uploaded_file = st.file_uploader(
-    "Choose your large Excel report (.xlsx)",
-    type=['xlsx', 'csv']
+    "Choose a CSV file",
+    type=['csv']
 )
 
 # The @st.cache_data decorator is crucial for performance.
@@ -71,34 +71,28 @@ if uploaded_file is not None:
     # Load the data using our cached function
     df = load_data(uploaded_file)
 
-    # --- UI Controls in Main Area ---
-    st.header("Dashboard Controls")
+    # --- UI Controls in the Sidebar ---
+    st.sidebar.header("Dashboard Controls")
     
-    # Create two columns for controls
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        timeframe = st.radio(
-            "Select Period:",
-            ('Quarterly', '6-Month', 'Annually'),
-            index=2  # Default to 'Annually'
-        )
-    
-    with col2:
-        unique_locales = sorted(df['Target Locale'].unique().tolist())
-        selected_languages = st.multiselect(
-            "Select Languages:",
-            options=unique_locales,
-            default=unique_locales
-        )
+    # Timeframe selection using st.radio (replaces ToggleButtons)
+    timeframe = st.sidebar.radio(
+        "Select Period:",
+        ('Quarterly', '6-Month', 'Annually'),
+        index=2 # Default to 'Annually'
+    )
 
-    # Add a separator
-    st.divider()
+    # Language selection using st.multiselect (replaces checkboxes)
+    unique_locales = sorted(df['Target Locale'].unique().tolist())
+    selected_languages = st.sidebar.multiselect(
+        "Select Languages:",
+        options=unique_locales,
+        default=unique_locales # Default to all languages selected
+    )
 
     # --- Filtering and Plotting Logic ---
     # Show a message if no languages are selected
     if not selected_languages:
-        st.warning("Please select at least one language above.")
+        st.warning("Please select at least one language in the sidebar.")
     else:
         # This is your existing data filtering and preparation logic
         filtered_df = df[df['Target Locale'].isin(selected_languages)]
