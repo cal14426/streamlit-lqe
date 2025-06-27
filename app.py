@@ -185,12 +185,46 @@ with tab2:
             else:
                 if 'severity_name' in filtered_q_df.columns:
                     filtered_q_df['severity_name'] = filtered_q_df['severity_name'].str.lower()
-                # --- Pie Chart: Category Distribution ---
-                st.subheader("Distribution of Issue Categories")
-                category_counts = filtered_q_df['category_name'].value_counts()
-                pie_fig = go.Figure(data=[go.Pie(labels=category_counts.index, values=category_counts.values, hole=.3)])
-                pie_fig.update_layout(title_text='Overall Issue Category Distribution')
-                st.plotly_chart(pie_fig, use_container_width=True)
+                if 'category_name' in filtered_q_df.columns and filtered_q_df['category_name'].notna().any():
+                    filtered_q_df['category_name'] = filtered_q_df['category_name'].str.lower()
+                
+                # --- Time-based Pie Charts: Category Distribution ---
+                st.subheader("Category Distribution by Time Period")
+                
+                date_col = 'date'
+                if q_timeframe == 'Quarterly':
+                    group_key = filtered_q_df[date_col].dt.to_period('Q').astype(str)
+                elif q_timeframe == '6-Month':
+                    half = np.where(filtered_q_df[date_col].dt.month <= 6, 'H1', 'H2')
+                    group_key = filtered_q_df[date_col].dt.year.astype(str) + '-' + half
+                else:  # Annually
+                    group_key = filtered_q_df[date_col].dt.year.astype(str)
+
+                filtered_q_df['Time Period'] = group_key
+                time_periods = sorted(filtered_q_df['Time Period'].unique())
+
+                # Check if there's any data to plot
+                if not time_periods or filtered_q_df['category_name'].isnull().all():
+                    st.info("No category data available for the selected time frame and language(s).")
+                else:
+                    color_map = {
+                        'locale accuracy': '#1f77b4',  # A standard blue
+                        'style': '#aec7e8'           # A lighter blue
+                    }
+                    for period in time_periods:
+                        period_df = filtered_q_df[filtered_q_df['Time Period'] == period]
+                        category_counts = period_df['category_name'].value_counts()
+                        
+                        if not category_counts.empty:
+                            pie_colors = [color_map.get(cat) for cat in category_counts.index]
+                            pie_fig = go.Figure(data=[go.Pie(
+                                labels=category_counts.index, 
+                                values=category_counts.values, 
+                                hole=.3,
+                                marker_colors=pie_colors
+                            )])
+                            pie_fig.update_layout(title_text=f'Issue Category Distribution for {period}')
+                            st.plotly_chart(pie_fig, use_container_width=True)
 
                 # --- Bar Chart: Severity per Category ---
                 st.subheader("Issue Severity by Category")
