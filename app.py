@@ -7,32 +7,23 @@ import os
 # --- Page Configuration ---
 # Set the title and icon that appear in the browser tab and app window
 st.set_page_config(
-    page_title="Translation Edit Dashboard",
-    page_icon="�",
+    page_title="Translation Analysis Dashboard",
+    page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"  # This ensures the sidebar is expanded by default
+    initial_sidebar_state="expanded"
 )
 
 # --- App Title and Description ---
-st.title("📊 Translation Edit Dashboard")
+st.title("📊 Translation Analysis Dashboard")
 st.write(
-    "This app analyzes translation edits between the distributor review and the post-production review. "
-    "Upload csv file to begin. Please convert to csv before processing for speed."
+    "This app provides tools for analyzing translation edits and quality metrics. "
+    "Use the tabs below to navigate between the 'Edit Dashboard' and 'Quality Analysis' sections."
 )
 
-# --- File Uploader and Data Caching ---
-# Use a file uploader to allow users to provide their own data
-uploaded_file = st.file_uploader(
-    "Choose a CSV file",
-    type=['csv']
-)
-
-# The @st.cache_data decorator is crucial for performance.
-# It tells Streamlit to only run this function once for a given file.
+# --- Data Loading Functions ---
 @st.cache_data
-def load_data(file):
-    """Loads and cleans the data from the uploaded file."""
-    # Check if the file is CSV or Excel and load accordingly
+def load_edit_data(file):
+    """Loads and cleans the data from the uploaded translation edit file."""
     try:
         if file.name.endswith('.csv'):
             df = pd.read_csv(file, low_memory=False)
@@ -42,112 +33,194 @@ def load_data(file):
         st.error(f"Error reading file: {e}")
         st.stop()
 
-    # --- This is your existing data cleaning logic ---
     col_trans_dist = 'Edit Distance: from Translate to Dist. Review'
     col_dist_lsp = 'Edit Distance: from Dist. Review to LSP Review'
     date_col = 'Phase Timestamp: Translate'
     
-    # Ensure the required columns exist
-    for col in [col_trans_dist, col_dist_lsp, date_col, 'Target Locale', 'Project']:
+    required_cols = [col_trans_dist, col_dist_lsp, date_col, 'Target Locale', 'Project']
+    for col in required_cols:
         if col not in df.columns:
-            # If a column is missing, stop and show an error message
             st.error(f"Error: Missing required column '{col}' in the uploaded file.")
-            st.stop() # Halts the app execution
-    df = df[['Phase Timestamp: Translate', 'Target Locale', 'Project', 'Edit Distance: from Translate to Dist. Review', 'Edit Distance: from Dist. Review to LSP Review']]
+            st.stop()
+            
+    df = df[required_cols]
 
-    # Clean and convert the timestamp column to datetime objects
-    df[date_col] = df[date_col].astype(str).replace('No Data', np.nan)
-    df[date_col] = df[date_col].str.replace(r'\s[A-Z]{3,4}$', '', regex=True)
-    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    df[date_col] = pd.to_datetime(df[date_col].str.replace(r'\s[A-Z]{3,4}$', '', regex=True), errors='coerce')
     df.dropna(subset=[date_col], inplace=True)
 
-    # Convert edit distance columns to numeric types
     df[col_trans_dist] = pd.to_numeric(df[col_trans_dist], errors='coerce').fillna(0)
     df[col_dist_lsp] = pd.to_numeric(df[col_dist_lsp], errors='coerce').fillna(0)
     
     return df
 
-# --- Main App Logic ---
-# Only proceed if a file has been uploaded
-if uploaded_file is not None:
-    # Load the data using our cached function
-    df = load_data(uploaded_file)
+@st.cache_data
+def load_quality_data(file):
+    """Loads and cleans data from the quality analysis file."""
+    try:
+        df = pd.read_csv(file, low_memory=False)
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+        st.stop()
 
-    # --- UI Controls in the Sidebar ---
-    st.sidebar.header("Dashboard Controls")
+    required_cols = ['target_locale', 'category_name', 'severity_name', 'target_finalized_date']
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"Error: Missing one or more required columns. Please ensure the file contains: {', '.join(required_cols)}")
+        st.stop()
+
+    df = df[required_cols]
+    df = df.rename(columns={'target_finalized_date': 'date'})
     
-    # Timeframe selection using st.radio (replaces ToggleButtons)
-    timeframe = st.sidebar.radio(
-        "Select Period:",
-        ('Quarterly', '6-Month', 'Annually'),
-        index=2 # Default to 'Annually'
-    )
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df.dropna(subset=['date'], inplace=True)
+    
+    return df
 
-    # Language selection using st.multiselect (replaces checkboxes)
-    unique_locales = sorted(df['Target Locale'].unique().tolist())
-    selected_languages = st.sidebar.multiselect(
-        "Select Languages:",
-        options=unique_locales,
-        default=unique_locales # Default to all languages selected
-    )
+# --- UI Tabs ---
+tab1, tab2 = st.tabs(["Translation Edit Dashboard", "Quality Analysis"])
 
-    # Project selection using st.multiselect
-    unique_projects = sorted(df['Project'].unique().tolist())
-    selected_projects = st.sidebar.multiselect(
-        "Select Projects:",
-        options=unique_projects,
-        default=unique_projects # Default to all projects selected
-    )
+with tab1:
+    st.header("Translation Edit Analysis")
+    uploaded_file = st.file_uploader("Choose a translation edit CSV file", type=['csv'], key="edit_uploader")
 
-    # --- Filtering and Plotting Logic ---
-    # Show a message if no languages or projects are selected
-    if not selected_languages or not selected_projects:
-        st.warning("Please select at least one language and project in the sidebar.")
-    else:
-        # This is your existing data filtering and preparation logic
-        filtered_df = df[df['Target Locale'].isin(selected_languages) & df['Project'].isin(selected_projects)]
+    if uploaded_file is not None:
+        df = load_edit_data(uploaded_file)
 
-        dist_review_edits = filtered_df['Edit Distance: from Translate to Dist. Review'] > 0
-        lsp_review_edits = filtered_df['Edit Distance: from Dist. Review to LSP Review'] > 0
-        
-        filtered_df['Distributor Review Changes'] = np.where(dist_review_edits, 1, 0)
-        filtered_df['Post-Production Changes'] = np.where(lsp_review_edits, 1, 0)
-        
-        # Check if there's any data left to plot after filtering
-        if filtered_df.empty or filtered_df[['Distributor Review Changes', 'Post-Production Changes']].sum().sum() == 0:
-            st.info(f"No edit data found for the selected languages and projects: {', '.join(selected_languages)}")
-        else:
-            # This is your revised grouping logic
-            date_col = 'Phase Timestamp: Translate'
-            if timeframe == 'Quarterly':
-                group_key = filtered_df[date_col].dt.year.astype(str) + '-Q' + filtered_df[date_col].dt.quarter.astype(str)
-            elif timeframe == '6-Month':
-                half = np.where(filtered_df[date_col].dt.month <= 6, 'H1', 'H2')
-                group_key = filtered_df[date_col].dt.year.astype(str) + '-' + half
-            else: # Annually
-                group_key = filtered_df[date_col].dt.year
-            
-            plot_data = filtered_df.groupby(group_key)[['Distributor Review Changes', 'Post-Production Changes']].sum()
-            x_labels = plot_data.index.astype(str)
-
-            # --- Create and Display the Plot ---
-            # Create the plotly figure (this is the same as before)
-            fig = go.Figure(data=[
-                go.Bar(name='Distributor Review Changes', x=x_labels, y=plot_data['Distributor Review Changes'], marker_color='#1f77b4'),
-                go.Bar(name='Post-Production Changes (LSP)', x=x_labels, y=plot_data['Post-Production Changes'], marker_color='#ff7f0e')
-            ])
-
-            fig.update_layout(
-                title_text=f'Edit Comparison for Selected Languages and Projects',
-                barmode='group',
-                xaxis_title='Time Period',
-                yaxis_title='Number of Segments Edited',
-                legend_title_text='Edit Stage'
+        # --- UI Controls ---
+        st.subheader("Dashboard Controls")
+        control_cols = st.columns(3)
+        with control_cols[0]:
+            timeframe = st.radio(
+                "Select Period:",
+                ('Quarterly', '6-Month', 'Annually'),
+                index=2,
+                key='edit_timeframe'
+            )
+        with control_cols[1]:
+            unique_locales = sorted(df['Target Locale'].unique().tolist())
+            selected_languages = st.multiselect(
+                "Select Languages:",
+                options=unique_locales,
+                default=unique_locales
+            )
+        with control_cols[2]:
+            unique_projects = sorted(df['Project'].unique().tolist())
+            selected_projects = st.multiselect(
+                "Select Projects:",
+                options=unique_projects,
+                default=unique_projects
             )
 
-            # Use st.plotly_chart to display the figure in the app
-            st.plotly_chart(fig, use_container_width=True)
+        # --- Filtering and Plotting Logic ---
+        if not selected_languages or not selected_projects:
+            st.warning("Please select at least one language and project.")
+        else:
+            filtered_df = df[df['Target Locale'].isin(selected_languages) & df['Project'].isin(selected_projects)]
 
-else:
-    # Show a placeholder message if no file is uploaded yet
-    st.info("Awaiting file upload...")
+            filtered_df['Distributor Review Changes'] = np.where(filtered_df['Edit Distance: from Translate to Dist. Review'] > 0, 1, 0)
+            filtered_df['Post-Production Changes'] = np.where(filtered_df['Edit Distance: from Dist. Review to LSP Review'] > 0, 1, 0)
+            
+            if filtered_df.empty or filtered_df[['Distributor Review Changes', 'Post-Production Changes']].sum().sum() == 0:
+                st.info("No edit data found for the selected criteria.")
+            else:
+                date_col = 'Phase Timestamp: Translate'
+                if timeframe == 'Quarterly':
+                    group_key = filtered_df[date_col].dt.to_period('Q').astype(str)
+                elif timeframe == '6-Month':
+                    half = np.where(filtered_df[date_col].dt.month <= 6, 'H1', 'H2')
+                    group_key = filtered_df[date_col].dt.year.astype(str) + '-' + half
+                else:
+                    group_key = filtered_df[date_col].dt.year
+                
+                plot_data = filtered_df.groupby(group_key)[['Distributor Review Changes', 'Post-Production Changes']].sum()
+                x_labels = plot_data.index.astype(str)
+
+                fig = go.Figure(data=[
+                    go.Bar(name='Distributor Review Changes', x=x_labels, y=plot_data['Distributor Review Changes'], marker_color='#1f77b4'),
+                    go.Bar(name='Post-Production Changes (LSP)', x=x_labels, y=plot_data['Post-Production Changes'], marker_color='#ff7f0e')
+                ])
+                fig.update_layout(
+                    title_text='Edit Comparison for Selected Languages and Projects',
+                    barmode='group',
+                    xaxis_title='Time Period',
+                    yaxis_title='Number of Segments Edited',
+                    legend_title_text='Edit Stage'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Awaiting file upload for edit analysis...")
+
+with tab2:
+    st.header("Translation Quality Analysis")
+    quality_file = st.file_uploader("Upload a quality report CSV file", type=['csv'], key="quality_uploader")
+
+    if quality_file is not None:
+        quality_df = load_quality_data(quality_file)
+        
+        # --- UI Controls ---
+        st.subheader("Analysis Controls")
+        q_control_cols = st.columns(2)
+        with q_control_cols[0]:
+            q_timeframe = st.radio(
+                "Select Period for Time Series:",
+                ('Quarterly', '6-Month', 'Annually'),
+                index=2,
+                key='quality_timeframe'
+            )
+        with q_control_cols[1]:
+            q_unique_locales = sorted(quality_df['target_locale'].unique().tolist())
+            q_selected_languages = st.multiselect(
+                "Select Languages:",
+                options=q_unique_locales,
+                default=q_unique_locales,
+                key='quality_languages'
+            )
+
+        if not q_selected_languages:
+            st.warning("Please select at least one language.")
+        else:
+            filtered_q_df = quality_df[quality_df['target_locale'].isin(q_selected_languages)].copy()
+
+            if filtered_q_df.empty:
+                st.info("No data available for the selected languages.")
+            else:
+                if 'severity_name' in filtered_q_df.columns:
+                    filtered_q_df['severity_name'] = filtered_q_df['severity_name'].str.lower()
+                # --- Pie Chart: Category Distribution ---
+                st.subheader("Distribution of Issue Categories")
+                category_counts = filtered_q_df['category_name'].value_counts()
+                pie_fig = go.Figure(data=[go.Pie(labels=category_counts.index, values=category_counts.values, hole=.3)])
+                pie_fig.update_layout(title_text='Overall Issue Category Distribution')
+                st.plotly_chart(pie_fig, use_container_width=True)
+
+                # --- Bar Chart: Severity per Category ---
+                st.subheader("Issue Severity by Category")
+                severity_counts = filtered_q_df.groupby(['category_name', 'severity_name']).size().unstack(fill_value=0)
+                
+                color_map = {'critical': 'red', 'major': 'yellow', 'minor': 'blue'}
+                
+                # Define the order for stacking
+                severity_order = ['minor', 'major', 'critical']
+                
+                # Get available severities from the dataframe columns, respecting the desired order
+                available_severities = [s for s in severity_order if s in severity_counts.columns]
+                
+                # Add any other severities that might exist in the data but are not in our defined order
+                other_severities = [s for s in severity_counts.columns if s not in available_severities]
+
+                sev_fig = go.Figure()
+                for severity in available_severities + other_severities:
+                    sev_fig.add_trace(go.Bar(
+                        name=severity, 
+                        x=severity_counts.index, 
+                        y=severity_counts[severity],
+                        marker_color=color_map.get(severity)
+                    ))
+                sev_fig.update_layout(
+                    barmode='stack', 
+                    title_text='Issue Severity by Category', 
+                    xaxis_title='Category', 
+                    yaxis_title='Count'
+                )
+                st.plotly_chart(sev_fig, use_container_width=True)
+    else:
+        st.info("Awaiting file upload for quality analysis...")
