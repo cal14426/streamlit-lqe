@@ -48,12 +48,12 @@ def load_data(file):
     date_col = 'Phase Timestamp: Translate'
     
     # Ensure the required columns exist
-    for col in [col_trans_dist, col_dist_lsp, date_col, 'Target Locale']:
+    for col in [col_trans_dist, col_dist_lsp, date_col, 'Target Locale', 'Project']:
         if col not in df.columns:
             # If a column is missing, stop and show an error message
             st.error(f"Error: Missing required column '{col}' in the uploaded file.")
             st.stop() # Halts the app execution
-    df = df[['Phase Timestamp: Translate', 'Target Locale', 'Edit Distance: from Translate to Dist. Review', 'Edit Distance: from Dist. Review to LSP Review']]
+    df = df[['Phase Timestamp: Translate', 'Target Locale', 'Project', 'Edit Distance: from Translate to Dist. Review', 'Edit Distance: from Dist. Review to LSP Review']]
 
     # Clean and convert the timestamp column to datetime objects
     df[date_col] = df[date_col].astype(str).replace('No Data', np.nan)
@@ -91,13 +91,21 @@ if uploaded_file is not None:
         default=unique_locales # Default to all languages selected
     )
 
+    # Project selection using st.multiselect
+    unique_projects = sorted(df['Project'].unique().tolist())
+    selected_projects = st.sidebar.multiselect(
+        "Select Projects:",
+        options=unique_projects,
+        default=unique_projects # Default to all projects selected
+    )
+
     # --- Filtering and Plotting Logic ---
-    # Show a message if no languages are selected
-    if not selected_languages:
-        st.warning("Please select at least one language in the sidebar.")
+    # Show a message if no languages or projects are selected
+    if not selected_languages or not selected_projects:
+        st.warning("Please select at least one language and project in the sidebar.")
     else:
         # This is your existing data filtering and preparation logic
-        filtered_df = df[df['Target Locale'].isin(selected_languages)]
+        filtered_df = df[df['Target Locale'].isin(selected_languages) & df['Project'].isin(selected_projects)]
 
         dist_review_edits = filtered_df['Edit Distance: from Translate to Dist. Review'] > 0
         lsp_review_edits = filtered_df['Edit Distance: from Dist. Review to LSP Review'] > 0
@@ -107,7 +115,7 @@ if uploaded_file is not None:
         
         # Check if there's any data left to plot after filtering
         if filtered_df.empty or filtered_df[['Distributor Review Changes', 'Post-Production Changes']].sum().sum() == 0:
-            st.info(f"No edit data found for the selected languages: {', '.join(selected_languages)}")
+            st.info(f"No edit data found for the selected languages and projects: {', '.join(selected_languages)}")
         else:
             # This is your revised grouping logic
             date_col = 'Phase Timestamp: Translate'
@@ -130,7 +138,7 @@ if uploaded_file is not None:
             ])
 
             fig.update_layout(
-                title_text=f'Edit Comparison for Selected Languages',
+                title_text=f'Edit Comparison for Selected Languages and Projects',
                 barmode='group',
                 xaxis_title='Time Period',
                 yaxis_title='Number of Segments Edited',
